@@ -237,6 +237,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSToolba
     private func attach(_ c: PaneContainer) {
         guard c.isDetached else { return }
         panesSplit.insertArrangedSubview(c.view, at: c === left ? 0 : 1)
+        // The pane comes back at the width it had when hidden; if the window has grown since, the
+        // two panes no longer fill the split view (a dark strip on the right) until they are refitted.
+        panesSplit.adjustSubviews()
         panesSplit.setPosition(panesSplit.bounds.width / 2, ofDividerAt: 0)
         UserDefaults.standard.removeObject(forKey: "hiddenSide")
     }
