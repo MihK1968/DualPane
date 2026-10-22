@@ -44,6 +44,8 @@ favourites. The window title shows the active folder and its path.
 
 ![Type-to-filter: typing "bend" narrows the Lectures folder to the two matching PDFs](docs/filter.png)
 
+![⌘B branch view: typing "pdf" in Documents finds the PDFs in Lectures, Papers and Thesis in one list](docs/branch.png)
+
 ### Folder peek
 
 - Every folder row has a triangle in front of it. Click it (or press → with the row selected;
