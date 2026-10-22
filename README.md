@@ -38,7 +38,8 @@ favourites. The window title shows the active folder and its path.
   folder and in all its subfolders, all levels deep, in one flat list with a Folder column
   showing where each one is. Typing then searches them all. Packages such as apps count as
   files and symbolic links to folders are not followed. The list follows changes anywhere in
-  the tree and stops at 50,000 files (the status bar says so). ⌘B again, or going to another
+  the tree and stops at 50,000 files (the status bar says so). ⌥→ / ⌥← opens the selected
+  file's own folder in the other pane, with the file selected. ⌘B again, or going to another
   folder, returns to the normal list.
 
 ![Type-to-filter: typing "bend" narrows the Lectures folder to the two matching PDFs](docs/filter.png)
@@ -254,7 +255,7 @@ one `swiftc` call over `Sources/`.
 | ⌘⌥C | copy path(s); the current folder's path when nothing is selected |
 | ⌘L | edit the path bar as text (copy it with ⌘C, Return goes to the typed path) |
 | ⌘E | same folder in the other pane |
-| ⌥→ / ⌥← | from the left pane, show its folder in the right pane / from the right pane, show it in the left (only while both panes are shown) |
+| ⌥→ / ⌥← | from the left pane, show its folder in the right pane / from the right pane, show it in the left (only while both panes are shown; in ⌘B view, the selected file's own folder, with the file selected) |
 | ⌘U | swap panes |
 | ⌘⇧P | hide / show second pane |
 | ⌘⌥S | hide / show sidebar |

@@ -173,7 +173,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSToolba
         guard fromLeft == toRight else { return }
         let target = fromLeft ? right : left
         guard !target.isDetached else { return }
-        target.current.navigate(to: pane.directory)
+        // In branch view (⌘B) the selected file may sit deep below the pane's folder: show its own folder, with it selected.
+        if pane.branchView, let file = pane.selectedItems.first?.url {
+            target.current.navigate(to: file.deletingLastPathComponent(), select: file)
+        } else {
+            target.current.navigate(to: pane.directory)
+        }
     }
 
     private func updateTitle() {
