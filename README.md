@@ -34,6 +34,12 @@ favourites. The window title shows the active folder and its path.
 - Backspace deletes the last letter, or goes to the parent folder when there is no filter.
   Esc clears the filter, then the selection.
 - Return opens the first match, so `dow` Return enters Downloads from your home folder.
+- ⌘B (View → All Files in Subfolders), like Total Commander's branch view: every file in the
+  folder and in all its subfolders, all levels deep, in one flat list with a Folder column
+  showing where each one is. Typing then searches them all. Packages such as apps count as
+  files and symbolic links to folders are not followed. The list follows changes anywhere in
+  the tree and stops at 50,000 files (the status bar says so). ⌘B again, or going to another
+  folder, returns to the normal list.
 
 ![Type-to-filter: typing "bend" narrows the Lectures folder to the two matching PDFs](docs/filter.png)
 
@@ -234,6 +240,7 @@ one `swiftc` call over `Sources/`.
 | Return, ⌘↓, ⌘O, double-click | open; folders are entered |
 | ⌘↑ | enclosing folder |
 | → / ← | open / close the selected folder's rows in place (folder peek) |
+| ⌘B | all files in all subfolders in one list, so typing searches them all (again: back to normal) |
 | ⌘[ / ⌘] | back / forward |
 | Tab | switch pane |
 | Space / ⌘Y | Quick Look |

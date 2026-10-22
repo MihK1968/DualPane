@@ -143,6 +143,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let view = NSMenu(title: "View")
         view.addItem(item("Show Hidden Files", #selector(MainWindowController.toggleHidden(_:)), ".", [.command, .shift]))
         view.addItem(item("Refresh", #selector(PaneController.refresh(_:)), "r"))
+        view.addItem(item("All Files in Subfolders", #selector(PaneController.toggleBranchView(_:)), "b"))
         view.addItem(.separator())
         view.addItem(item("Switch Pane", #selector(MainWindowController.switchPane(_:)), "\t", []))
         view.addItem(item("Swap Panes", #selector(MainWindowController.swapPanes(_:)), "u"))
@@ -232,6 +233,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ⌘⌥S                 show/hide sidebar         ⌘⇧P        show/hide second pane
         ⌘^T                 add folder to sidebar     ⌘^O        open folder in new tab
         Space / ⌘Y          Quick Look                ⌘U         swap panes
+        ⌘B                  all files in all subfolders in one list, so typing searches them all (again: back)
         F5 / F6             copy / move to other pane
         F7 / ⌘⇧N            new folder                F2 / ⌘Return  rename (or click the name of the selected item and wait)
         F8 / ⌘⌫             move to Trash             ⌘D         duplicate

@@ -83,6 +83,9 @@ extension PaneController: NSOutlineViewDataSource, NSOutlineViewDelegate, NSText
         case "size":
             tf.stringValue = item.sizeString
             tf.textColor = .secondaryLabelColor
+        case "folder":
+            tf.stringValue = item.branchFolder
+            tf.textColor = .secondaryLabelColor
         default:
             tf.stringValue = item.dateString
             tf.textColor = .secondaryLabelColor
@@ -409,6 +412,9 @@ extension PaneController: NSOutlineViewDataSource, NSOutlineViewDelegate, NSText
         case #selector(copyPath(_:)):
             item.title = sel.isEmpty ? "Copy Folder Path" : "Copy Path"
             return true
+        case #selector(toggleBranchView(_:)):
+            item.state = branchView ? .on : .off
+            return true
         case #selector(renameSelected(_:)):
             item.title = sel.count > 1 ? "Rename \(sel.count) Items…" : "Rename"
             return !sel.isEmpty
@@ -472,6 +478,7 @@ extension PaneController: NSOutlineViewDataSource, NSOutlineViewDelegate, NSText
     @objc func newFolder(_ s: Any?) {
         guard let u = FileOps.newFolder(in: directory, name: "untitled folder", window: view.window) else { return }
         clearFilter()
+        if branchView { toggleBranchView(nil) }        // branch view lists no folders, so the new one could not be renamed
         reloadKeeping([u])
         DispatchQueue.main.async { [weak self] in self?.startRename() }
     }

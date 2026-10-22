@@ -1,5 +1,6 @@
 import AppKit
 import Quartz
+import CoreServices
 
 protocol PaneDelegate: AnyObject {
     func paneDidBecomeActive(_ pane: PaneController)
@@ -53,6 +54,12 @@ final class PaneController: NSViewController, PaneKeyHandler, NSToolbarItemValid
     var collapsing: FileItem?
     var collapseNesting = 0
     private var subWatchers: [URL: DispatchSourceFileSystemObject] = [:]
+    // Branch view (⌘B, as in Total Commander): every file in every subfolder in one flat list, so the
+    // typed filter searches them all. Ends when the pane goes to another folder.
+    var branchView = false
+    private var branchCut = false
+    static let branchFileLimit = 50_000
+    private var treeStream: FSEventStreamRef?      // watches the whole tree while branch view is on
 
     let side: String
     init(directory url: URL, side: String) {
@@ -123,7 +130,10 @@ final class PaneController: NSViewController, PaneKeyHandler, NSToolbarItemValid
         let date = NSTableColumn(identifier: .init("modified"))
         date.title = "Date Modified"; date.width = 150; date.minWidth = 100; date.maxWidth = 220
         date.sortDescriptorPrototype = NSSortDescriptor(key: "modified", ascending: false)
-        [name, size, date].forEach { tableView.addTableColumn($0) }
+        let folder = NSTableColumn(identifier: .init("folder"))   // branch view only: where each file is
+        folder.title = "Folder"; folder.width = 150; folder.minWidth = 60
+        folder.isHidden = true
+        [name, folder, size, date].forEach { tableView.addTableColumn($0) }
         tableView.outlineTableColumn = name           // the triangle and the indentation live in the name column
         tableView.autoresizesOutlineColumn = false
 
@@ -141,6 +151,9 @@ final class PaneController: NSViewController, PaneKeyHandler, NSToolbarItemValid
         tableView.doubleAction = #selector(openSelected)
         tableView.autosaveName = "paneTable.\(side)"
         tableView.autosaveTableColumns = true
+        if let f = tableView.tableColumn(withIdentifier: .init("folder")), !f.isHidden {   // saved while branch view was on
+            name.width += f.width; f.isHidden = true
+        }
         tableView.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
         tableView.autoresizingMask = [.width]
         // File URLs (Finder, our own panes) and file promises (Mail attachments, Photos, Safari images…).
@@ -258,7 +271,7 @@ final class PaneController: NSViewController, PaneKeyHandler, NSToolbarItemValid
         }
         if !pathField.isHidden { cancelPathEdit() }
         endRename(commit: false)
-        if target != directory.standardizedFileURL { expanded = [] }
+        if target != directory.standardizedFileURL { expanded = []; setBranchView(false) }
         directory = target
         updatePathItems()
         if !filter.isEmpty { filter = "" }
@@ -394,7 +407,11 @@ final class PaneController: NSViewController, PaneKeyHandler, NSToolbarItemValid
     private func load(selecting: [URL]? = nil, scrollTop: Bool = false) {
         let keep = selecting ?? selectedItems.map { $0.url }
         do {
-            allItems = try FileItem.contents(of: directory, showHidden: Settings.showHidden)
+            if branchView {
+                (allItems, branchCut) = FileItem.allFiles(under: directory, showHidden: Settings.showHidden, limit: Self.branchFileLimit)
+            } else {
+                allItems = try FileItem.contents(of: directory, showHidden: Settings.showHidden)
+            }
             statusField.textColor = .secondaryLabelColor
         } catch {
             allItems = []
@@ -431,6 +448,22 @@ final class PaneController: NSViewController, PaneKeyHandler, NSToolbarItemValid
         guard let c = item.children else { return }
         item.shownChildren = shown(c)
         for x in c { refreshShownChildren(x) }
+    }
+
+    // MARK: Branch view
+    /// ⌘B: all files in all subfolders in one list (again: back to the folder's own list).
+    @objc func toggleBranchView(_ s: Any?) {
+        setBranchView(!branchView)
+        startWatching()                                 // before the load, which sets up the watchers of open folder rows
+        load(selecting: selectedURLs)
+    }
+    private func setBranchView(_ on: Bool) {
+        branchView = on
+        let id = NSUserInterfaceItemIdentifier("folder")
+        tableView.tableColumn(withIdentifier: id)?.isHidden = !on
+        // Next to the name (the saved column layout puts a column it did not know about last).
+        let i = tableView.column(withIdentifier: id)
+        if on, i > 1 { tableView.moveColumn(i, toColumn: 1) }
     }
 
     // MARK: Folder peek
@@ -475,7 +508,8 @@ final class PaneController: NSViewController, PaneKeyHandler, NSToolbarItemValid
         let sel = selectedItems
         let folders = items.filter { $0.isDirectory }.count
         var s = "\(items.count) item\(items.count == 1 ? "" : "s")"
-        if folders > 0 { s += " (\(folders) folder\(folders == 1 ? "" : "s"))" }
+        if branchView { s = "\(items.count) file\(items.count == 1 ? "" : "s") in all subfolders" + (branchCut ? " (stopped at \(Self.branchFileLimit))" : "") }
+        else if folders > 0 { s += " (\(folders) folder\(folders == 1 ? "" : "s"))" }
         if !sel.isEmpty {
             let bytes = sel.reduce(Int64(0)) { $0 + max($1.size, 0) }
             s += "  •  \(sel.count) selected"
@@ -572,11 +606,26 @@ final class PaneController: NSViewController, PaneKeyHandler, NSToolbarItemValid
     private func startWatching() {
         stopWatching()
         watcher = makeWatcher(directory) { [weak self] in self?.directoryEvent() }
+        if branchView { startTreeStream() }
+    }
+    /// Branch view lists the whole tree, so one FSEvents stream reports changes anywhere in it.
+    private func startTreeStream() {
+        var ctx = FSEventStreamContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(), retain: nil, release: nil, copyDescription: nil)
+        let callback: FSEventStreamCallback = { _, info, _, _, _, _ in
+            guard let info = info else { return }
+            Unmanaged<PaneController>.fromOpaque(info).takeUnretainedValue().scheduleReload()
+        }
+        guard let s = FSEventStreamCreate(nil, callback, &ctx, [directory.path] as CFArray, FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
+                                          0.3, FSEventStreamCreateFlags(kFSEventStreamCreateFlagNone)) else { return }
+        FSEventStreamSetDispatchQueue(s, .main)
+        FSEventStreamStart(s)
+        treeStream = s
     }
     private func stopWatching() {
         watcher?.cancel(); watcher = nil
         for (_, src) in subWatchers { src.cancel() }
         subWatchers = [:]
+        if let s = treeStream { FSEventStreamStop(s); FSEventStreamInvalidate(s); FSEventStreamRelease(s); treeStream = nil }
     }
     private func makeWatcher(_ url: URL, handler: @escaping () -> Void) -> DispatchSourceFileSystemObject? {
         let fd = open(url.path, O_EVTONLY)

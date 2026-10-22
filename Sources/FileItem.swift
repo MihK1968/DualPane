@@ -11,12 +11,15 @@ final class FileItem: NSObject {
     let isHidden: Bool
     @objc let size: Int64      // -1 for folders
     @objc let modified: Date
-    let kind: String
+    /// Looked up on first use: it is the slowest of the values and branch view lists many files.
+    lazy var kind: String = (try? url.resourceValues(forKeys: [.localizedTypeDescriptionKey]))?.localizedTypeDescription ?? (isDirectory ? "Folder" : "Document")
 
     /// Folder peek (the triangle in the file list): this folder's own listing once it has been opened
     /// in a pane (nil until then), and the rows shown for it after the pane's filter and sort.
     var children: [FileItem]?
     var shownChildren: [FileItem] = []
+    /// Branch view: the folder this file is in, relative to the pane's folder ("" for the pane's folder itself).
+    var branchFolder = ""
 
     private var _icon: NSImage?
     var icon: NSImage {
@@ -30,7 +33,7 @@ final class FileItem: NSObject {
     init(url: URL) {
         self.url = url
         let keys: Set<URLResourceKey> = [.isDirectoryKey, .isPackageKey, .isSymbolicLinkKey, .isAliasFileKey, .isHiddenKey,
-                                         .fileSizeKey, .contentModificationDateKey, .localizedTypeDescriptionKey]
+                                         .fileSizeKey, .contentModificationDateKey]
         let rv = try? url.resourceValues(forKeys: keys)
         name = url.lastPathComponent
         isSymlink = rv?.isSymbolicLink ?? false
@@ -49,7 +52,6 @@ final class FileItem: NSObject {
         isDirectory = dir && !pkg
         size = isDirectory ? -1 : Int64(rv?.fileSize ?? 0)
         modified = rv?.contentModificationDate ?? .distantPast
-        kind = rv?.localizedTypeDescription ?? (isDirectory ? "Folder" : "Document")
         super.init()
     }
 
@@ -89,10 +91,31 @@ final class FileItem: NSObject {
     /// Lists a directory. Hidden files are included only when `showHidden` is set.
     static func contents(of directory: URL, showHidden: Bool) throws -> [FileItem] {
         let keys: [URLResourceKey] = [.isDirectoryKey, .isPackageKey, .isSymbolicLinkKey, .isAliasFileKey, .isHiddenKey,
-                                      .fileSizeKey, .contentModificationDateKey, .localizedTypeDescriptionKey]
+                                      .fileSizeKey, .contentModificationDateKey]
         let opts: FileManager.DirectoryEnumerationOptions = showHidden ? [] : [.skipsHiddenFiles]
         let urls = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: keys, options: opts)
         return urls.map { FileItem(url: $0) }
+    }
+
+    /// Branch view: every file under a directory, all levels deep, in one list. Folders themselves are
+    /// not listed, packages count as files and symlinked folders are not followed. Stops after `limit` files.
+    static func allFiles(under directory: URL, showHidden: Bool, limit: Int) -> (files: [FileItem], cut: Bool) {
+        let keys: [URLResourceKey] = [.isDirectoryKey, .isPackageKey, .isSymbolicLinkKey, .isAliasFileKey, .isHiddenKey,
+                                      .fileSizeKey, .contentModificationDateKey]
+        var opts: FileManager.DirectoryEnumerationOptions = [.skipsPackageDescendants]
+        if !showHidden { opts.insert(.skipsHiddenFiles) }
+        guard let en = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: keys, options: opts,
+                                                      errorHandler: { _, _ in true }) else { return ([], false) }
+        var out: [FileItem] = []
+        for case let u as URL in en {
+            let it = FileItem(url: u)
+            if it.isDirectory { continue }
+            if out.count >= limit { return (out, true) }
+            // By depth, not by cutting off the directory's path: /tmp and /private/tmp spell the same folder.
+            it.branchFolder = u.deletingLastPathComponent().pathComponents.suffix(en.level - 1).joined(separator: "/")
+            out.append(it)
+        }
+        return (out, false)
     }
 }
 
