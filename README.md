@@ -2,7 +2,7 @@
 
 A small native macOS two-pane file manager, written as a Finder / Path Finder replacement
 with Total Commander style type-to-filter. Swift + AppKit, no dependencies, no Xcode project:
-it builds with the command line tools only.
+it builds with the command line tools only. See [Install](#install) for step-by-step instructions.
 
 ![DualPane: two panes with tabs, sidebar with nested favourites, folder peek open in both panes](docs/main.png)
 
@@ -151,15 +151,78 @@ Tabs and their folders, the window size, the sidebar width and whether it is hid
 second pane, column widths, the hidden-files setting, the favourites, the quick access row
 and which nested favourites are collapsed.
 
-## Build and install
+## Install
 
-Requirements: macOS 13 or later and the Xcode Command Line Tools (`xcode-select --install`).
-There is no Xcode project and no package dependency; `build.sh` is one `swiftc` call.
+DualPane is distributed as source. You build it yourself with one command, which takes
+about a minute and needs no Xcode and no Apple developer account. Requirements: macOS 13
+(Ventura) or later.
 
-    ./build.sh              # -> build/DualPane.app
-    ./build.sh install      # -> ~/Applications/DualPane.app
+**1. Install Apple's command line tools** (skip if you already have them). Open Terminal
+(Applications → Utilities) and run:
 
-The app is signed ad hoc on your own machine, so Gatekeeper lets it run.
+    xcode-select --install
+
+Click Install in the dialog that appears and wait for it to finish. If it says the tools are
+already installed, go on.
+
+**2. Get the source**, either with git:
+
+    cd ~/Downloads
+    git clone https://github.com/MihK1968/DualPane.git
+    cd DualPane
+
+or without git: on this page click the green **Code** button, then **Download ZIP**,
+double-click the ZIP in Downloads, and in Terminal:
+
+    cd ~/Downloads/DualPane-main
+
+**3. Build and install:**
+
+    ./build.sh install
+
+This compiles the app and copies it to `~/Applications/DualPane.app` (the Applications folder
+inside your home folder). It replaces an earlier copy there, keeping your settings.
+
+**4. Start it** from Finder (Go → Home → Applications → DualPane), with Spotlight (⌘Space,
+type DualPane), or from Terminal:
+
+    open ~/Applications/DualPane.app
+
+To keep it in the Dock, right-click its Dock icon while it runs and choose Options → Keep in Dock.
+
+The app is signed ad hoc on your own Mac while it builds, so it opens without any Gatekeeper
+warning. The first time you use some features macOS asks for permission once: Desktop,
+Documents or Downloads access when you open those folders, and Automation access the first
+time Get Info (⌘I) asks Finder for its info window or DualPane lists its folders in Default
+Folder X.
+
+### Optional: open folders in DualPane instead of Finder
+
+    swift Tools/set-default-folder-app.swift on     # run inside the source folder
+
+After this, `open ~/Documents` and folders opened from other apps land in DualPane.
+`off` hands them back to Finder. "Reveal in Finder" always stays with Finder.
+
+### Update
+
+    cd ~/Downloads/DualPane          # wherever you put the source
+    git pull
+    ./build.sh install
+
+Quit DualPane first, or quit and reopen it afterwards. With a ZIP download, download a new ZIP
+and run step 3 again in the new folder.
+
+### Uninstall
+
+    swift Tools/set-default-folder-app.swift off    # only if you turned it on
+    rm -rf ~/Applications/DualPane.app
+    defaults delete ee.korgesaar.DualPane           # removes tabs, favourites and other settings
+
+### Build only
+
+`./build.sh` without `install` builds `build/DualPane.app` in the source folder and leaves
+`~/Applications` alone. There is no Xcode project and no package dependency: `build.sh` is
+one `swiftc` call over `Sources/`.
 
 ## Keys
 
