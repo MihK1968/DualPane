@@ -332,6 +332,14 @@ extension PaneController: NSOutlineViewDataSource, NSOutlineViewDelegate, NSText
         add("Move to Other Pane", #selector(MainWindowController.moveToOtherPane(_:)))
         m.addItem(.separator())
         add("New Folder", #selector(newFolder(_:)))
+        let newFileItem = NSMenuItem(title: "New File", action: nil, keyEquivalent: "")
+        newFileItem.submenu = NSMenu(title: "New File")
+        for (t, ext) in [("Markdown (.md)", "md"), ("Word Document (.docx)", "docx"), ("Excel Workbook (.xlsx)", "xlsx")] {
+            let i = NSMenuItem(title: t, action: #selector(newFile(_:)), keyEquivalent: "")
+            i.representedObject = ext
+            newFileItem.submenu?.addItem(i)
+        }
+        m.addItem(newFileItem)
         add("Duplicate", #selector(duplicate(_:)))
         add("Move to Trash", #selector(moveToTrash(_:)))
         m.addItem(.separator())
@@ -483,8 +491,10 @@ extension PaneController: NSOutlineViewDataSource, NSOutlineViewDelegate, NSText
         DispatchQueue.main.async { [weak self] in self?.startRename() }
     }
 
+    /// New empty file: a .txt, or the type a context menu item names (md, docx, xlsx).
     @objc func newFile(_ s: Any?) {
-        guard let u = FileOps.newFile(in: directory, name: "untitled.txt", window: view.window) else { return }
+        let ext = (s as? NSMenuItem)?.representedObject as? String ?? "txt"
+        guard let u = FileOps.newFile(in: directory, name: "untitled." + ext, window: view.window) else { return }
         clearFilter()
         reloadKeeping([u])
         DispatchQueue.main.async { [weak self] in self?.startRename() }

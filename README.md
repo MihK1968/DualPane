@@ -95,8 +95,10 @@ favourites. The window title shows the active folder and its path.
 
 ### Files
 
-- New folder (F7 / ⌘⇧N, opens rename at once), new empty file (⌘⌥N), duplicate (⌘D), move
+- New folder (F7 / ⌘⇧N, opens rename at once: just type the name), new empty file (⌘⌥N), duplicate (⌘D), move
   to Trash (F8 / ⌘⌫).
+- Right-click → New File → Markdown (.md), Word Document (.docx) or Excel Workbook (.xlsx): an empty
+  file of that type (the .docx and .xlsx open in Word and Excel), with rename open at once.
 - Rename with F2 / ⌘Return, or Finder-style: click the name of the already selected item and
   pause (a slow double-click); a real double-click still opens it.
 - Batch rename: with several items selected, F2 / ⌘Return (or Rename in the right-click

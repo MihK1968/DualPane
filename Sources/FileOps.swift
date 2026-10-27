@@ -142,15 +142,82 @@ enum FileOps {
     @discardableResult
     static func newFolder(in dir: URL, name: String, window: NSWindow?) -> URL? {
         let url = uniqueURL(for: name, in: dir)
-        do { try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false); return url }
+        // Spelled as a folder (trailing slash), as the folder listing spells it, so the new row can be found and selected.
+        do { try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false); return URL(fileURLWithPath: url.path, isDirectory: true) }
         catch { alert("Could not create folder: \(error.localizedDescription)", window: window); return nil }
     }
 
     @discardableResult
     static func newFile(in dir: URL, name: String, window: NSWindow?) -> URL? {
         let url = uniqueURL(for: name, in: dir)
-        if FileManager.default.createFile(atPath: url.path, contents: Data()) { return url }
+        if FileManager.default.createFile(atPath: url.path, contents: emptyDocument(ext: url.pathExtension)) { return url }
         alert("Could not create file “\(name)”.", window: window); return nil
+    }
+
+    /// Contents of a new empty file: nothing for text, an empty document for .docx and .xlsx (those are zip
+    /// packages, so a file of zero bytes is not a valid document).
+    static func emptyDocument(ext: String) -> Data {
+        let rels = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+        func types(_ overrides: String) -> String {
+            #"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>"#
+                + overrides + "</Types>"
+        }
+        func relations(_ list: [(String, String)]) -> String {
+            #"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">"#
+                + list.enumerated().map { #"<Relationship Id="rId\#($0.offset + 1)" Type="\#($0.element.0)" Target="\#($0.element.1)"/>"# }.joined()
+                + "</Relationships>"
+        }
+        switch ext.lowercased() {
+        case "docx":
+            return zip([
+                ("[Content_Types].xml", types(#"<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>"#)),
+                ("_rels/.rels", relations([("\(rels)/officeDocument", "word/document.xml")])),
+                ("word/document.xml", #"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p/></w:body></w:document>"#),
+            ])
+        case "xlsx":
+            return zip([
+                ("[Content_Types].xml", types(#"<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>"#)),
+                ("_rels/.rels", relations([("\(rels)/officeDocument", "xl/workbook.xml")])),
+                ("xl/workbook.xml", #"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>"#),
+                ("xl/_rels/workbook.xml.rels", relations([("\(rels)/worksheet", "worksheets/sheet1.xml")])),
+                ("xl/worksheets/sheet1.xml", #"<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData/></worksheet>"#),
+            ])
+        default:
+            return Data()
+        }
+    }
+
+    /// A zip archive of these files, stored without compression (enough for the few hundred bytes of an empty document).
+    private static func zip(_ files: [(name: String, text: String)]) -> Data {
+        var crcTable = [UInt32](repeating: 0, count: 256)
+        for i in 0..<256 {
+            var c = UInt32(i)
+            for _ in 0..<8 { c = c & 1 != 0 ? 0xEDB88320 ^ (c >> 1) : c >> 1 }
+            crcTable[i] = c
+        }
+        func crc32(_ d: Data) -> UInt32 { ~d.reduce(~UInt32(0)) { crcTable[Int(($0 ^ UInt32($1)) & 0xFF)] ^ ($0 >> 8) } }
+        let now = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: Date())
+        let h: Int = now.hour ?? 0, mi: Int = now.minute ?? 0, sec: Int = now.second ?? 0
+        let y: Int = max((now.year ?? 1980) - 1980, 0), mo: Int = now.month ?? 1, d: Int = now.day ?? 1
+        let dosTime = UInt16(h << 11 | mi << 5 | sec / 2), dosDate = UInt16(y << 9 | mo << 5 | d)
+        var out = Data(), central = Data()
+        func u16(_ v: UInt16, _ d: inout Data) { withUnsafeBytes(of: v.littleEndian) { d.append(contentsOf: $0) } }
+        func u32(_ v: UInt32, _ d: inout Data) { withUnsafeBytes(of: v.littleEndian) { d.append(contentsOf: $0) } }
+        for f in files {
+            let name = Data(f.name.utf8), body = Data(f.text.utf8), crc = crc32(body), offset = UInt32(out.count)
+            u32(0x04034B50, &out); u16(20, &out); u16(0, &out); u16(0, &out); u16(dosTime, &out); u16(dosDate, &out)
+            u32(crc, &out); u32(UInt32(body.count), &out); u32(UInt32(body.count), &out); u16(UInt16(name.count), &out); u16(0, &out)
+            out.append(name); out.append(body)
+            u32(0x02014B50, &central); u16(20, &central); u16(20, &central); u16(0, &central); u16(0, &central); u16(dosTime, &central); u16(dosDate, &central)
+            u32(crc, &central); u32(UInt32(body.count), &central); u32(UInt32(body.count), &central); u16(UInt16(name.count), &central)
+            u16(0, &central); u16(0, &central); u16(0, &central); u16(0, &central); u32(0, &central); u32(offset, &central)
+            central.append(name)
+        }
+        let centralOffset = UInt32(out.count)
+        out.append(central)
+        u32(0x06054B50, &out); u16(0, &out); u16(0, &out); u16(UInt16(files.count), &out); u16(UInt16(files.count), &out)
+        u32(UInt32(central.count), &out); u32(centralOffset, &out); u16(0, &out)
+        return out
     }
 
     @discardableResult
